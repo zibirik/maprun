@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MapRun</string>
+    <string name="widget_title">MapRun — неделя</string>
+    <string name="notification_channel_name">Тренировка</string>
+    <string name="notification_channel_desc">Показывает активную запись пробежки</string>
+    <string name="notification_title">Идёт тренировка</string>
+    <string name="tracking_service_pause">Пауза</string>
+    <string name="tracking_service_resume">Продолжить</string>
+    <string name="tracking_service_stop">Стоп</string>
+</resources>
