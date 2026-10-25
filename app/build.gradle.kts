@@ -25,6 +25,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Пока нет store-ключа: подпись debug, APK ставится на телефон.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -94,6 +94,15 @@ app/src/main/java/com/example/runner/
 
 ---
 
+## Скачать APK
+
+Готовый файл лежит в [Releases](https://github.com/zibirik/maprun/releases): `MapRun-1.0.0.apk`.
+
+На Android 8+ разреши установку из неизвестных источников, открой APK и поставь.  
+Подпись debug — на свой телефон ставится, в Play Store такой файл не принимают.
+
+---
+
 ## Сборка
 
 ### Android Studio
