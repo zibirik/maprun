@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,7 +44,9 @@ import com.example.runner.domain.util.WorkoutMath
 import com.example.runner.presentation.components.EmptyState
 import com.example.runner.presentation.components.SectionCard
 import com.example.runner.presentation.components.SectionLabel
+import com.example.runner.presentation.components.TrackProgress
 import com.example.runner.ui.theme.Danger
+import com.example.runner.ui.theme.Success
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -101,8 +102,8 @@ fun HistoryScreen(
             ) {
                 EmptyState(
                     icon = Icons.Outlined.DirectionsRun,
-                    title = "Пока тихо",
-                    subtitle = "Первая пробежка появится здесь сразу после сохранения.",
+                    title = "Лента пустая",
+                    subtitle = "Выйди на карту, нажми Старт — после финиша пробежка сама появится здесь.",
                 )
             }
         } else {
@@ -112,14 +113,38 @@ fun HistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item {
+                    val goalMeters = state.settings.weeklyGoalKm * 1000.0
+                    val ratio = if (goalMeters > 0) {
+                        (state.weekDistanceMeters / goalMeters).toFloat()
+                    } else {
+                        0f
+                    }
+                    val done = ratio >= 1f
                     SectionCard(color = MaterialTheme.colorScheme.primaryContainer) {
-                        SectionLabel("Эта неделя")
+                        SectionLabel(if (done) "Цель недели закрыта" else "Цель недели")
                         Text(
                             FormatUtils.distance(state.weekDistanceMeters, state.settings.unit),
                             style = MaterialTheme.typography.headlineMedium,
                         )
+                        TrackProgress(
+                            progress = ratio,
+                            color = if (done) Success else MaterialTheme.colorScheme.primary,
+                        )
                         Text(
-                            FormatUtils.workoutsLabel(state.weekCount),
+                            buildString {
+                                append(FormatUtils.workoutsLabel(state.weekCount))
+                                append("  ·  цель ")
+                                append(FormatUtils.distance(goalMeters, state.settings.unit))
+                                if (!done) {
+                                    append("  ·  ещё ")
+                                    append(
+                                        FormatUtils.distance(
+                                            (goalMeters - state.weekDistanceMeters).coerceAtLeast(0.0),
+                                            state.settings.unit,
+                                        ),
+                                    )
+                                }
+                            },
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                         )
                         weekBestId?.let { id ->
@@ -217,39 +242,31 @@ private fun HistoryRow(
         },
         enableDismissFromStartToEnd = false,
     ) {
-        SectionCard(modifier = Modifier.clickable(onClick = onClick)) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(MaterialTheme.shapes.extraSmall)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
-            )
+        SectionCard(
+            modifier = Modifier.clickable(onClick = onClick),
+            color = if (weekBest) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ) {
             Text(
-                date,
+                buildString {
+                    append(date)
+                    if (weekBest) append("  ·  лучший темп недели")
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
             )
+            Text(distance, style = MaterialTheme.typography.headlineMedium)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
             ) {
-                Text(distance, style = MaterialTheme.typography.headlineMedium)
-                Text(duration, style = MaterialTheme.typography.titleLarge)
+                Text(duration, style = MaterialTheme.typography.titleMedium)
+                Text("темп $pace", style = MaterialTheme.typography.titleMedium)
+                Text(calories, style = MaterialTheme.typography.titleMedium)
             }
-            Text(
-                buildString {
-                    append("темп $pace  ·  $calories")
-                    if (weekBest) append("  ·  лучший за неделю")
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (weekBest) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
-                },
-            )
         }
     }
 }

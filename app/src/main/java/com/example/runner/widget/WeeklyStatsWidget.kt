@@ -42,18 +42,31 @@ class WeeklyStatsWidget : GlanceAppWidget() {
         val weekStart = GetStatisticsUseCase.startOfWeekMillis()
         val week = entry.workoutRepository().workoutsSince(weekStart)
         val distance = week.sumOf { it.distanceMeters }
-        val unit = entry.settingsRepository().settings.first().unit
+        val settings = entry.settingsRepository().settings.first()
+        val unit = settings.unit
         val label = FormatUtils.distance(distance, unit)
         val count = FormatUtils.workoutsLabel(week.size)
+        val goalKm = settings.weeklyGoalKm
+        val left = (goalKm * 1000.0 - distance).coerceAtLeast(0.0)
+        val goalLine = if (left <= 1.0) {
+            "цель недели закрыта"
+        } else {
+            "ещё ${FormatUtils.distance(left, unit)}"
+        }
 
         provideContent {
-            WidgetContent(context, label, count)
+            WidgetContent(context, label, count, goalLine)
         }
     }
 }
 
 @Composable
-private fun WidgetContent(context: Context, weeklyDistance: String, weekCount: String) {
+private fun WidgetContent(
+    context: Context,
+    weeklyDistance: String,
+    weekCount: String,
+    goalLine: String,
+) {
     val startIntent = Intent(context, MainActivity::class.java).apply {
         action = Intent.ACTION_VIEW
         data = Uri.parse("runner://start")
@@ -81,7 +94,7 @@ private fun WidgetContent(context: Context, weeklyDistance: String, weekCount: S
             ),
         )
         Text(
-            text = weekCount,
+            text = "$weekCount  ·  $goalLine",
             style = TextStyle(color = ColorProvider(Color(0xFFC7F2EC)), fontSize = 13.sp),
         )
         Spacer(GlanceModifier.height(10.dp))

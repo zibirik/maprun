@@ -10,4 +10,5 @@ data class UserSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val voiceEveryKm: Float = 1f,
     val autoPauseEnabled: Boolean = true,
+    val weeklyGoalKm: Float = 20f,
 )

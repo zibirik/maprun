@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.RecordVoiceOver
@@ -33,8 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.runner.BuildConfig
 import com.example.runner.domain.model.AppThemeMode
 import com.example.runner.domain.model.DistanceUnit
+import com.example.runner.domain.util.FormatUtils
 import com.example.runner.presentation.components.SectionCard
 import com.example.runner.presentation.components.SectionLabel
 import java.util.Locale
@@ -43,6 +46,7 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val goalMeters = settings.weeklyGoalKm * 1000.0
 
     Scaffold(
         topBar = {
@@ -76,6 +80,26 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         label = { Text("Мили") },
                     )
                 }
+            }
+
+            SectionCard {
+                SettingTitle(Icons.Outlined.Flag, "Цель недели")
+                Text(
+                    FormatUtils.distance(goalMeters, settings.unit),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    "Прогресс будет на карте и в ленте",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Slider(
+                    value = settings.weeklyGoalKm,
+                    onValueChange = viewModel::setWeeklyGoalKm,
+                    valueRange = 5f..80f,
+                    steps = 14,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             SectionCard {
@@ -143,12 +167,15 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     Switch(checked = settings.autoPauseEnabled, onCheckedChange = viewModel::setAutoPause)
                 }
             }
-            Text(
-                "MapRun 1.0.0  ·  без облака, всё на телефоне\nНа пробежке экран не гаснет, чтобы карта не пропадала.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            )
+            SectionCard(color = MaterialTheme.colorScheme.primaryContainer) {
+                Text("MAPRUN", style = MaterialTheme.typography.labelLarge)
+                Text("Версия ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Без облака, всё на телефоне. На пробежке экран не гаснет.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+                )
+            }
         }
     }
 }

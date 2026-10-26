@@ -98,16 +98,30 @@ fun PermissionScreen(
             )
         }
         Text(
-            "Нужен GPS",
-            style = MaterialTheme.typography.headlineLarge,
+            "MapRun",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 24.dp),
         )
         Text(
-            "MapRun пишет маршрут даже когда приложение свёрнуто. Без геолокации старт недоступен.",
+            "Нужен GPS",
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Text(
+            "Без геолокации старт недоступен. Маршрут пишется и в свёрнутом приложении.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.padding(top = 10.dp, bottom = 28.dp),
+            modifier = Modifier.padding(top = 10.dp, bottom = 18.dp),
         )
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("• Живая карта и темп", style = MaterialTheme.typography.bodyMedium)
+            Text("• Запись в фоне, даже если свернёшь", style = MaterialTheme.typography.bodyMedium)
+            Text("• История, ачивки и тепловая карта", style = MaterialTheme.typography.bodyMedium)
+        }
         Button(
             onClick = { launcher.launch(LOCATION_PERMISSIONS) },
             modifier = Modifier.fillMaxWidth().height(54.dp),

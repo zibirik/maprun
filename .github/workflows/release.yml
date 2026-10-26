@@ -37,7 +37,7 @@ jobs:
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME#v}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then
-            VERSION="1.1.0"
+            VERSION="1.2.0"
           fi
           cp app/build/outputs/apk/release/app-release.apk "dist/MapRun-${VERSION}.apk"
           echo "APK_PATH=dist/MapRun-${VERSION}.apk" >> "$GITHUB_ENV"
@@ -58,6 +58,11 @@ jobs:
           fail_on_unmatched_files: true
           body: |
             Готовый APK для установки на Android 8+.
+
+            ### 1.2.0
+            - Цель недели: прогресс на карте, в ленте и на виджете
+            - Свежий дизайн карточек, ачивок, статистики и финиша
+            - Шаринг текстом из деталей тренировки
 
             ### 1.1.0
             - Фикс вылета при завершении пробежки (Android 12+)

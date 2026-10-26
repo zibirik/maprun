@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -23,8 +23,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.runner.presentation.components.SectionCard
+import com.example.runner.presentation.components.TrackProgress
 import com.example.runner.ui.theme.Ember
 import com.example.runner.ui.theme.Sand
+import com.example.runner.ui.theme.Success
 import com.example.runner.ui.theme.TealSoft
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,7 +37,18 @@ fun AchievementsScreen(viewModel: AchievementsViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Достижения") },
+                title = {
+                    Column {
+                        Text("Достижения")
+                        if (state.items.isNotEmpty()) {
+                            Text(
+                                "${state.unlockedCount} из ${state.items.size}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -51,11 +64,13 @@ fun AchievementsScreen(viewModel: AchievementsViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(span = { GridItemSpan(2) }) {
-                SectionCard(color = Sand.copy(alpha = 0.55f)) {
+                SectionCard(
+                    color = if (state.challengeDone) Success.copy(alpha = 0.16f) else Sand.copy(alpha = 0.55f),
+                ) {
                     Text(
                         if (state.challengeDone) "ЧЕЛЛЕНДЖ ЗАКРЫТ" else "ЧЕЛЛЕНДЖ ДНЯ",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Ember,
+                        color = if (state.challengeDone) Success else Ember,
                     )
                     Text(state.challengeTitle.ifBlank { "Загрузка…" }, style = MaterialTheme.typography.headlineMedium)
                     Text(state.challengeDescription)
@@ -91,12 +106,7 @@ private fun AchievementCard(ui: AchievementUi) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
         )
         if (!item.isUnlocked) {
-            LinearProgressIndicator(
-                progress = ui.progress,
-                modifier = Modifier.fillMaxWidth(),
-                color = Ember,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
+            TrackProgress(progress = ui.progress, color = Ember)
             ui.detail?.let {
                 Text(
                     it,

@@ -13,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Sms
+import com.example.runner.domain.util.FormatUtils
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,7 +62,19 @@ fun DetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Тренировка") },
+                title = {
+                    Column {
+                        Text("Тренировка")
+                        val whenText = (state as? DetailUiState.Success)?.workout?.startTime?.let(FormatUtils::workoutWhen)
+                        if (whenText != null) {
+                            Text(
+                                whenText,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -129,6 +143,8 @@ fun DetailScreen(
                                 controller.snapshot { bitmap ->
                                     if (bitmap != null) {
                                         ShareHelper.shareRouteImage(context, bitmap, ui.workout, unit)
+                                    } else {
+                                        ShareHelper.shareSummary(context, ui.workout, unit)
                                     }
                                 }
                             },
@@ -138,6 +154,14 @@ fun DetailScreen(
                             Icon(Icons.Outlined.Share, contentDescription = null)
                             Text("  Фото")
                         }
+                    }
+                    OutlinedButton(
+                        onClick = { ShareHelper.shareSummary(context, ui.workout, unit) },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = MaterialTheme.shapes.large,
+                    ) {
+                        Icon(Icons.Outlined.Sms, contentDescription = null)
+                        Text("  Поделиться текстом")
                     }
                 }
             }

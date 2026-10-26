@@ -35,6 +35,7 @@ class SettingsDataStore @Inject constructor(
         val theme = stringPreferencesKey("theme")
         val voiceKm = floatPreferencesKey("voice_every_km")
         val autoPause = booleanPreferencesKey("auto_pause")
+        val weeklyGoalKm = floatPreferencesKey("weekly_goal_km")
         val challengeDay = longPreferencesKey("challenge_completed_day")
     }
 
@@ -47,6 +48,7 @@ class SettingsDataStore @Inject constructor(
                 ?: AppThemeMode.SYSTEM,
             voiceEveryKm = prefs[Keys.voiceKm] ?: 1f,
             autoPauseEnabled = prefs[Keys.autoPause] ?: true,
+            weeklyGoalKm = prefs[Keys.weeklyGoalKm] ?: 20f,
         )
     }
 
@@ -68,6 +70,10 @@ class SettingsDataStore @Inject constructor(
 
     override suspend fun setAutoPause(enabled: Boolean) {
         dataStore.edit { it[Keys.autoPause] = enabled }
+    }
+
+    override suspend fun setWeeklyGoalKm(km: Float) {
+        dataStore.edit { it[Keys.weeklyGoalKm] = km.coerceIn(5f, 80f) }
     }
 
     override suspend fun markChallengeCompleted(epochDay: Long) {

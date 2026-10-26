@@ -117,7 +117,11 @@ fun ResultScreen(
                 SectionCard(color = Success.copy(alpha = 0.14f)) {
                     Text("СОХРАНЕНО", style = MaterialTheme.typography.labelLarge, color = Success)
                     Text(
-                        "Пробежка уже в истории. Можно поделиться или удалить.",
+                        FormatUtils.finishCheer(workout?.distanceMeters ?: 0.0),
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                    Text(
+                        "Уже в ленте. Можно поделиться или удалить.",
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }

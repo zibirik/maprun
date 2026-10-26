@@ -256,7 +256,7 @@ fun MapScreen(
             currentSplit = currentSplit,
             liveHint = challengeProgress?.first ?: "ещё $nextSplit до следующего км",
             greeting = FormatUtils.greeting(),
-            recapLine = recapLine(state.recap, unit),
+            recapLine = recapLine(state.recap, unit, state.settings.weeklyGoalKm),
             vsAvg = vsAvg,
             pauseLabel = if (tracking.status == TrackingStatus.PAUSED && pauseMillis > 0) {
                 "ПАУЗА · ${FormatUtils.duration(pauseMillis)}"
@@ -493,17 +493,25 @@ private fun StartButton(onClick: () -> Unit) {
     }
 }
 
-private fun recapLine(recap: MapRecap, unit: DistanceUnit): String? {
-    if (recap.weekCount == 0 && recap.lastStartTime == null) return null
+private fun recapLine(recap: MapRecap, unit: DistanceUnit, weeklyGoalKm: Float): String? {
     val parts = mutableListOf<String>()
+    val goal = weeklyGoalKm * 1000.0
+    if (goal > 0) {
+        val left = (goal - recap.weekMeters).coerceAtLeast(0.0)
+        parts += if (left <= 1.0) {
+            "цель недели закрыта"
+        } else {
+            "до цели ${FormatUtils.distance(left, unit)}"
+        }
+    }
     if (recap.weekCount > 0) {
-        parts += "неделя ${FormatUtils.distance(recap.weekMeters, unit)}"
+        parts += FormatUtils.workoutsLabel(recap.weekCount)
     }
     if (recap.streak > 1) {
         parts += "серия ${recap.streak} дн."
     }
     recap.lastStartTime?.let { time ->
-        parts += "последняя ${FormatUtils.dayLabel(time)} · ${FormatUtils.distance(recap.lastDistance, unit)}"
+        parts += "последняя ${FormatUtils.dayLabel(time)}"
     }
     return parts.joinToString("  ·  ").ifBlank { null }
 }

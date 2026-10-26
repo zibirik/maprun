@@ -107,6 +107,17 @@ object FormatUtils {
         )
     }
 
+    fun finishCheer(distanceMeters: Double): String {
+        return when {
+            distanceMeters >= 10_000 -> "Десятка. Серьёзно."
+            distanceMeters >= 5_000 -> "Пятёрка закрыта"
+            distanceMeters >= 3_000 -> "Хорошая тройка"
+            distanceMeters >= 1_000 -> "Километр есть"
+            distanceMeters >= 200 -> "Короткий, но живой выход"
+            else -> "Разминка засчитана"
+        }
+    }
+
     fun greeting(hour: Int = LocalTime.now().hour): String {
         return when (hour) {
             in 5..10 -> "Доброе утро"

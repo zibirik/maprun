@@ -12,6 +12,7 @@ interface SettingsRepository {
     suspend fun setThemeMode(mode: AppThemeMode)
     suspend fun setVoiceEveryKm(km: Float)
     suspend fun setAutoPause(enabled: Boolean)
+    suspend fun setWeeklyGoalKm(km: Float)
     suspend fun markChallengeCompleted(epochDay: Long)
     suspend fun lastCompletedChallengeDay(): Long?
 }

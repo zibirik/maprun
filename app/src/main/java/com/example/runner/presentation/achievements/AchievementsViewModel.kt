@@ -30,6 +30,7 @@ data class AchievementsUiState(
     val challengeTitle: String = "",
     val challengeDescription: String = "",
     val challengeDone: Boolean = false,
+    val unlockedCount: Int = 0,
 )
 
 @HiltViewModel
@@ -46,11 +47,13 @@ class AchievementsViewModel @Inject constructor(
         val total = history.sumOf { it.distanceMeters }
         val longest = history.maxOfOrNull { it.distanceMeters } ?: 0.0
         val streak = currentStreak(history)
+        val mapped = items.map { achievementProgress(it, total, longest, streak) }
         AchievementsUiState(
-            items = items.map { achievementProgress(it, total, longest, streak) },
+            items = mapped,
             challengeTitle = challenge.title,
             challengeDescription = challenge.description,
             challengeDone = challenge.isCompleted,
+            unlockedCount = mapped.count { it.item.isUnlocked },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AchievementsUiState())
 }

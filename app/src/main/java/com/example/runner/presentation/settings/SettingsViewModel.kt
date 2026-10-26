@@ -28,4 +28,5 @@ class SettingsViewModel @Inject constructor(
     fun setTheme(mode: AppThemeMode) = viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     fun setVoiceEveryKm(km: Float) = viewModelScope.launch { settingsRepository.setVoiceEveryKm(km) }
     fun setAutoPause(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoPause(enabled) }
+    fun setWeeklyGoalKm(km: Float) = viewModelScope.launch { settingsRepository.setWeeklyGoalKm(km) }
 }
