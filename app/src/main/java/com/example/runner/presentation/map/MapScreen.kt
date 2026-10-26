@@ -263,10 +263,12 @@ fun MapScreen(
             } else {
                 null
             },
+            finished = tracking.status == TrackingStatus.FINISHED,
             onStart = viewModel::startCountdown,
             onPause = viewModel::pause,
             onResume = viewModel::resume,
             onStop = { confirmStop = true },
+            onOpenResult = onFinished,
         )
 
         if (tracking.status == TrackingStatus.COUNTDOWN) {
@@ -278,7 +280,7 @@ fun MapScreen(
         AlertDialog(
             onDismissRequest = { confirmStop = false },
             title = { Text("Завершить тренировку?") },
-            text = { Text("Запись остановится. Потом можно сохранить результат или отменить.") },
+            text = { Text("Запись остановится, пробежка сохранится сама и откроется экран финиша.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmStop = false
@@ -309,10 +311,12 @@ private fun LivePanel(
     recapLine: String?,
     vsAvg: Pair<String, Color>?,
     pauseLabel: String?,
+    finished: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onOpenResult: () -> Unit,
 ) {
     val active = tracking.status == TrackingStatus.RUNNING || tracking.status == TrackingStatus.PAUSED
     Surface(
@@ -417,6 +421,26 @@ private fun LivePanel(
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Стоп")
                     }
+                }
+            } else if (finished) {
+                Text("Финиш", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    "$distance  ·  ${FormatUtils.duration(tracking.durationMillis)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Text(
+                    "Пробежка уже сохранена. Открой результат или вернись позже в ленту.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = onOpenResult,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text("К результату", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Text(greeting, style = MaterialTheme.typography.headlineMedium)

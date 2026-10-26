@@ -10,6 +10,7 @@ import com.example.runner.domain.model.WorkoutStats
 import com.example.runner.domain.repository.SettingsRepository
 import com.example.runner.domain.repository.WorkoutRepository
 import com.example.runner.domain.usecase.CheckAchievementsUseCase
+import com.example.runner.domain.usecase.DeleteWorkoutUseCase
 import com.example.runner.domain.usecase.ExportGpxUseCase
 import com.example.runner.domain.usecase.GetDailyChallengeUseCase
 import com.example.runner.domain.usecase.SaveWorkoutUseCase
@@ -19,6 +20,7 @@ import com.example.runner.service.TrackingManager
 import com.example.runner.widget.WidgetUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -32,6 +34,7 @@ data class ResultUiState(
     val settings: UserSettings = UserSettings(),
     val tooShort: Boolean = false,
     val saving: Boolean = false,
+    val saved: Boolean = false,
     val error: String? = null,
     val upcoming: List<AchievementId> = emptyList(),
     val gpx: String = "",
@@ -48,6 +51,7 @@ sealed interface ResultEvent {
 class ResultViewModel @Inject constructor(
     private val trackingManager: TrackingManager,
     private val saveWorkout: SaveWorkoutUseCase,
+    private val deleteWorkout: DeleteWorkoutUseCase,
     private val checkAchievements: CheckAchievementsUseCase,
     private val dailyChallenge: GetDailyChallengeUseCase,
     private val widgetUpdater: WidgetUpdater,
@@ -59,61 +63,67 @@ class ResultViewModel @Inject constructor(
     private val events = Channel<ResultEvent>(Channel.BUFFERED)
     val eventsFlow = events.receiveAsFlow()
 
-    private val saving = kotlinx.coroutines.flow.MutableStateFlow(false)
-    private val upcoming = kotlinx.coroutines.flow.MutableStateFlow<List<AchievementId>>(emptyList())
-    private val error = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    private val history = kotlinx.coroutines.flow.MutableStateFlow<List<Workout>>(emptyList())
+    private val saving = MutableStateFlow(false)
+    private val upcoming = MutableStateFlow<List<AchievementId>>(emptyList())
+    private val error = MutableStateFlow<String?>(null)
+    private val history = MutableStateFlow<List<Workout>>(emptyList())
+    private val snapshot = MutableStateFlow(trackingManager.peekFinished())
+    private val savedId = MutableStateFlow(trackingManager.savedWorkoutId())
+    private val gpxCache = MutableStateFlow("")
 
     init {
         viewModelScope.launch {
             runCatching {
-                upcoming.value = checkAchievements.preview(trackingManager.finishedWorkout())
+                val id = trackingManager.persistIfNeeded { saveWorkout(it) }
+                savedId.value = id
+                snapshot.value = trackingManager.peekFinished()
+            }.onFailure {
+                error.value = "Автосохранение не вышло — нажми «Сохранить»"
             }
-        }
-        viewModelScope.launch {
-            runCatching {
-                history.value = workoutRepository.workoutsSince(0L)
+            val workout = snapshot.value
+            if (workout != null) {
+                gpxCache.value = runCatching { exportGpx(workout) }.getOrDefault("")
+                runCatching {
+                    upcoming.value = checkAchievements.preview(
+                        workout,
+                        includeUnsaved = savedId.value == null,
+                    )
+                }
             }
+            runCatching { history.value = workoutRepository.workoutsSince(0L) }
         }
     }
 
     val uiState = combine(
-        combine(trackingManager.state, settingsRepository.settings, saving, upcoming, error) {
-                live, settings, isSaving, soon, err ->
-            Triple(live, settings, Triple(isSaving, soon, err))
+        combine(settingsRepository.settings, saving, upcoming, error, history) {
+                settings, isSaving, soon, err, past ->
+            Packed(settings, isSaving, soon, err, past)
         },
-        history,
-    ) { packed, past ->
-        val live = packed.first
-        val settings = packed.second
-        val isSaving = packed.third.first
-        val soon = packed.third.second
-        val err = packed.third.third
-        val workout = if (live.points.isNotEmpty() || live.durationMillis > 0) {
-            trackingManager.finishedWorkout()
-        } else {
-            null
-        }
-        val stats = workout?.let { WorkoutMath.buildStats(it.points, it.durationMillis, settings.weightKg) }
-        val last = past.maxByOrNull { it.startTime }
+        snapshot,
+        savedId,
+        gpxCache,
+    ) { packed, workout, id, gpx ->
+        val stats = workout?.let { WorkoutMath.buildStats(it.points, it.durationMillis, packed.settings.weightKg) }
+        val previous = packed.past.filter { it.id != (id ?: -1L) }
+        val last = previous.maxByOrNull { it.startTime }
         val comparison = if (workout != null && last != null) {
             FormatUtils.compareRuns(
                 currentDistance = workout.distanceMeters,
                 currentPace = workout.avgPaceSecPerKm,
                 lastDistance = last.distanceMeters,
                 lastPace = last.avgPaceSecPerKm,
-                unit = settings.unit,
+                unit = packed.settings.unit,
             )
         } else {
             null
         }
-        val records = if (workout == null || past.isEmpty()) {
+        val records = if (workout == null || previous.isEmpty()) {
             emptyList()
         } else {
             buildList {
-                val bestDist = past.maxOf { it.distanceMeters }
+                val bestDist = previous.maxOf { it.distanceMeters }
                 if (workout.distanceMeters > bestDist + 5) add("Новый рекорд дистанции")
-                val bestPace = past.filter {
+                val bestPace = previous.filter {
                     it.distanceMeters >= 800 && it.avgPaceSecPerKm in 1.0..1_800.0
                 }.minOfOrNull { it.avgPaceSecPerKm }
                 if (
@@ -129,38 +139,61 @@ class ResultViewModel @Inject constructor(
         ResultUiState(
             workout = workout,
             stats = stats,
-            settings = settings,
+            settings = packed.settings,
             tooShort = (workout?.distanceMeters ?: 0.0) < 20.0,
-            saving = isSaving,
-            error = err,
-            upcoming = soon,
-            gpx = workout?.let(exportGpx::invoke).orEmpty(),
+            saving = packed.isSaving,
+            saved = id != null,
+            error = packed.err,
+            upcoming = packed.soon,
+            gpx = gpx,
             comparison = comparison,
             records = records,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResultUiState())
 
     fun save() {
-        val workout = trackingManager.finishedWorkout()
         viewModelScope.launch {
             saving.value = true
-            runCatching {
-                val id = saveWorkout(workout)
-                val saved = workout.copy(id = id)
-                val fresh = checkAchievements(saved)
-                dailyChallenge.completeIfMatched(saved)
-                widgetUpdater.refresh()
-                trackingManager.discard()
-                events.send(ResultEvent.Saved(fresh))
-            }.onFailure {
+            val unlocked = runCatching { finalizeAndLeave() }.getOrElse {
                 error.value = "Не удалось сохранить тренировку"
+                emptyList()
             }
             saving.value = false
+            if (error.value == null) {
+                events.send(ResultEvent.Saved(unlocked))
+            }
         }
     }
 
     fun discard() {
-        trackingManager.discard()
-        viewModelScope.launch { events.send(ResultEvent.Discarded) }
+        viewModelScope.launch {
+            runCatching {
+                trackingManager.savedWorkoutId()?.let { deleteWorkout(it) }
+            }
+            trackingManager.discard()
+            events.send(ResultEvent.Discarded)
+        }
     }
+
+    private suspend fun finalizeAndLeave(): List<AchievementId> {
+        val id = trackingManager.persistIfNeeded { saveWorkout(it) }
+        savedId.value = id
+        val workout = trackingManager.peekFinished()?.let { current ->
+            current.copy(id = id ?: current.id)
+        } ?: return emptyList()
+        snapshot.value = workout
+        val unlocked = checkAchievements(workout)
+        dailyChallenge.completeIfMatched(workout)
+        widgetUpdater.refresh()
+        trackingManager.discard()
+        return unlocked
+    }
+
+    private data class Packed(
+        val settings: UserSettings,
+        val isSaving: Boolean,
+        val soon: List<AchievementId>,
+        val err: String?,
+        val past: List<Workout>,
+    )
 }

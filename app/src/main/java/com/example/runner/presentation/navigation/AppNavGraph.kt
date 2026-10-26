@@ -156,7 +156,13 @@ fun AppNavGraph(
                     startFromWidget = startFromWidget,
                     onConsumedWidgetStart = onConsumedWidgetStart,
                     onOpenHeatmap = { navController.navigate(Routes.HEATMAP) },
-                    onFinished = { navController.navigate(Routes.RESULT) },
+                    onFinished = {
+                        if (navController.currentDestination?.route != Routes.RESULT) {
+                            navController.navigate(Routes.RESULT) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     bottomLift = mapLift,
                 )
             }

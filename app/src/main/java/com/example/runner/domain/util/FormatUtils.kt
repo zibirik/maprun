@@ -117,6 +117,24 @@ object FormatUtils {
         }
     }
 
+    fun workoutWhen(timestamp: Long): String {
+        val zdt = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault())
+        return DateTimeFormatter.ofPattern("d MMMM, HH:mm", Locale("ru")).format(zdt)
+    }
+
+    fun shareSummary(workoutDistance: Double, durationMillis: Long, paceSecPerKm: Double, calories: Int, unit: DistanceUnit): String {
+        return buildString {
+            append("Моя пробежка в MapRun\n")
+            append(distance(workoutDistance, unit))
+            append(" · ")
+            append(duration(durationMillis))
+            append(" · темп ")
+            append(pace(WorkoutMath.paceForUnit(paceSecPerKm, unit)))
+            append("\n")
+            append("$calories ккал")
+        }
+    }
+
     fun dayLabel(timestamp: Long, now: LocalDate = LocalDate.now()): String {
         val day = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
         return when (day) {

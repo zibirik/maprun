@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,6 +34,9 @@ class TrackingManager @Inject constructor() {
     private var ghostRun: GhostRun? = null
     private var weightKg: Float = 70f
     private var autoPauseEnabled: Boolean = true
+    private var finishedSnapshot: Workout? = null
+    private var savedWorkoutId: Long? = null
+    private val persistLock = Mutex()
 
     fun configure(weightKg: Float, autoPauseEnabled: Boolean) {
         this.weightKg = weightKg
@@ -44,6 +49,8 @@ class TrackingManager @Inject constructor() {
 
     fun beginCountdown() {
         resetClock()
+        finishedSnapshot = null
+        savedWorkoutId = null
         _state.value = LiveTrackingState(status = TrackingStatus.COUNTDOWN)
     }
 
@@ -89,12 +96,32 @@ class TrackingManager @Inject constructor() {
                 autoPaused = false,
             )
         }
+        if (finishedSnapshot == null) {
+            finishedSnapshot = buildWorkoutFromLive()
+        }
     }
 
     fun discard() {
         resetClock()
         ghostRun = null
+        finishedSnapshot = null
+        savedWorkoutId = null
         _state.value = LiveTrackingState()
+    }
+
+    fun peekFinished(): Workout? = finishedSnapshot
+
+    fun savedWorkoutId(): Long? = savedWorkoutId
+
+    suspend fun persistIfNeeded(save: suspend (Workout) -> Long): Long? {
+        persistLock.withLock {
+            savedWorkoutId?.let { return it }
+            val workout = finishedSnapshot ?: return null
+            val id = save(workout)
+            savedWorkoutId = id
+            finishedSnapshot = workout.copy(id = id)
+            return id
+        }
     }
 
     fun tickClock() {
@@ -134,7 +161,9 @@ class TrackingManager @Inject constructor() {
         }
     }
 
-    fun finishedWorkout(): Workout {
+    fun finishedWorkout(): Workout = finishedSnapshot ?: buildWorkoutFromLive()
+
+    private fun buildWorkoutFromLive(): Workout {
         val live = _state.value
         val stats = WorkoutMath.buildStats(live.points, live.durationMillis, weightKg)
         return Workout(

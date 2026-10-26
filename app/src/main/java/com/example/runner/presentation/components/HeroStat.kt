@@ -4,7 +4,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.runner.domain.model.DistanceUnit
 import com.example.runner.domain.model.WorkoutStats
 import com.example.runner.domain.util.FormatUtils
@@ -34,6 +33,11 @@ fun HeroStat(
             "${FormatUtils.duration(stats.durationMillis)}  ·  темп ${FormatUtils.pace(WorkoutMath.paceForUnit(stats.avgPaceSecPerKm, unit))}",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+        )
+        Text(
+            "${stats.calories} ккал  ·  набор ${FormatUtils.elevation(stats.elevationGainMeters)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
         )
     }
 }

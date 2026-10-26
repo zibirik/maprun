@@ -2,7 +2,7 @@ package com.example.runner.presentation.map
 
 import android.app.Application
 import android.content.Intent
-import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.runner.data.location.LocationClient
@@ -15,6 +15,7 @@ import com.example.runner.domain.repository.SettingsRepository
 import com.example.runner.domain.repository.WorkoutRepository
 import com.example.runner.domain.usecase.GetDailyChallengeUseCase
 import com.example.runner.domain.usecase.GetStatisticsUseCase
+import com.example.runner.domain.usecase.SaveWorkoutUseCase
 import com.example.runner.domain.util.FormatUtils
 import com.example.runner.service.TrackingManager
 import com.example.runner.service.TrackingService
@@ -57,6 +58,7 @@ class MapViewModel @Inject constructor(
     private val trackingManager: TrackingManager,
     settingsRepository: SettingsRepository,
     private val getDailyChallenge: GetDailyChallengeUseCase,
+    private val saveWorkout: SaveWorkoutUseCase,
     workouts: WorkoutRepository,
     locationClient: LocationClient,
 ) : AndroidViewModel(application) {
@@ -88,6 +90,10 @@ class MapViewModel @Inject constructor(
                 .map { it.status }
                 .distinctUntilChanged()
                 .collect { status ->
+                    if (status == TrackingStatus.FINISHED) {
+                        runCatching { trackingManager.persistIfNeeded { saveWorkout(it) } }
+                        events.send(MapEvent.NavigateToResult)
+                    }
                     if (status == TrackingStatus.IDLE || status == TrackingStatus.FINISHED) {
                         refreshChallenge()
                     }
@@ -132,22 +138,25 @@ class MapViewModel @Inject constructor(
     }
 
     fun startCountdown() {
+        if (trackingManager.state.value.status == TrackingStatus.FINISHED) return
         trackingManager.beginCountdown()
     }
 
     fun onCountdownFinished() {
-        startService(TrackingService.ACTION_START)
+        sendCommand(TrackingService.ACTION_START)
     }
 
-    fun pause() = startService(TrackingService.ACTION_PAUSE)
+    fun pause() = sendCommand(TrackingService.ACTION_PAUSE)
 
-    fun resume() = startService(TrackingService.ACTION_RESUME)
+    fun resume() = sendCommand(TrackingService.ACTION_RESUME)
 
     fun confirmStop() {
-        // Сразу фиксируем сессию, чтобы экран результата не гонялся с сервисом.
+        if (trackingManager.state.value.status == TrackingStatus.FINISHED) {
+            viewModelScope.launch { events.send(MapEvent.NavigateToResult) }
+            return
+        }
         trackingManager.stop()
-        startService(TrackingService.ACTION_STOP)
-        viewModelScope.launch { events.send(MapEvent.NavigateToResult) }
+        sendCommand(TrackingService.ACTION_STOP)
     }
 
     fun consumeWidgetStart() {
@@ -156,13 +165,15 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    private fun startService(action: String) {
+    private fun sendCommand(action: String) {
         val context = getApplication<Application>()
         val intent = Intent(context, TrackingService::class.java).setAction(action)
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
+            if (action == TrackingService.ACTION_START) {
+                ContextCompat.startForegroundService(context, intent)
             } else {
+                // Пауза/стоп нельзя поднимать через startForegroundService:
+                // на Android 12+ это убивает процесс, если сервис сразу зовёт stopSelf.
                 context.startService(intent)
             }
         }

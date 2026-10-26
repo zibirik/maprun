@@ -15,10 +15,15 @@ import com.example.runner.R
 import com.example.runner.data.location.LocationClient
 import com.example.runner.domain.model.TrackingStatus
 import com.example.runner.domain.repository.SettingsRepository
+import com.example.runner.domain.usecase.CheckAchievementsUseCase
+import com.example.runner.domain.usecase.GetDailyChallengeUseCase
 import com.example.runner.domain.usecase.GetGhostRunUseCase
+import com.example.runner.domain.usecase.SaveWorkoutUseCase
 import com.example.runner.domain.util.FormatUtils
+import com.example.runner.widget.WidgetUpdater
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -36,6 +42,10 @@ class TrackingService : LifecycleService() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var voiceCoach: VoiceCoach
     @Inject lateinit var getGhostRun: GetGhostRunUseCase
+    @Inject lateinit var saveWorkout: SaveWorkoutUseCase
+    @Inject lateinit var checkAchievements: CheckAchievementsUseCase
+    @Inject lateinit var dailyChallenge: GetDailyChallengeUseCase
+    @Inject lateinit var widgetUpdater: WidgetUpdater
 
     private var locationJob: Job? = null
     private var clockJob: Job? = null
@@ -50,12 +60,34 @@ class TrackingService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START -> startSession()
-            ACTION_PAUSE -> trackingManager.pause()
-            ACTION_RESUME -> trackingManager.resume()
-            ACTION_STOP -> stopSession()
+            ACTION_START -> {
+                startSession()
+                return START_STICKY
+            }
+            ACTION_PAUSE -> {
+                trackingManager.pause()
+                return START_STICKY
+            }
+            ACTION_RESUME -> {
+                trackingManager.resume()
+                return START_STICKY
+            }
+            ACTION_STOP -> {
+                // Если стоп пришёл через startForegroundService, сначала закрываем контракт FGS.
+                runCatching { startAsForeground() }
+                stopSession()
+                return START_NOT_STICKY
+            }
+            else -> {
+                val status = trackingManager.state.value.status
+                if (status == TrackingStatus.RUNNING || status == TrackingStatus.PAUSED) {
+                    startSession()
+                    return START_STICKY
+                }
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
-        return START_STICKY
     }
 
     private fun startSession() {
@@ -94,18 +126,32 @@ class TrackingService : LifecycleService() {
     }
 
     private fun stopSession() {
-        val live = trackingManager.state.value
-        lifecycleScope.launch {
-            val settings = settingsRepository.settings.first()
-            if (settings.voiceEveryKm > 0f) {
-                voiceCoach.speakFinish(live.distanceMeters, live.durationMillis, settings.unit)
-            }
-        }
         trackingManager.stop()
         locationJob?.cancel()
         clockJob?.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        lifecycleScope.launch {
+            val snapshot = trackingManager.peekFinished()
+            runCatching {
+                withContext(NonCancellable) {
+                    val id = trackingManager.persistIfNeeded { saveWorkout(it) }
+                    val saved = trackingManager.peekFinished()
+                    if (id != null && saved != null) {
+                        val workout = saved.copy(id = id)
+                        checkAchievements(workout)
+                        dailyChallenge.completeIfMatched(workout)
+                        widgetUpdater.refresh()
+                    }
+                }
+            }
+            runCatching {
+                val settings = settingsRepository.settings.first()
+                if (settings.voiceEveryKm > 0f && snapshot != null) {
+                    voiceCoach.speakFinish(snapshot.distanceMeters, snapshot.durationMillis, settings.unit)
+                }
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     private fun observeVoiceCues() {

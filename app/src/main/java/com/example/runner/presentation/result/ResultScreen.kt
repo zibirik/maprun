@@ -1,5 +1,6 @@
 package com.example.runner.presentation.result
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.runner.domain.model.AchievementId
+import com.example.runner.domain.util.FormatUtils
 import com.example.runner.presentation.components.HeroStat
 import com.example.runner.presentation.components.MapController
 import com.example.runner.presentation.components.MapLibreContainer
@@ -74,13 +77,29 @@ fun ResultScreen(
         }
     }
 
+    BackHandler {
+        if (state.saved) viewModel.save() else viewModel.discard()
+    }
+
     val workout = state.workout
     val stats = state.stats
+    val points = workout?.points.orEmpty()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Финиш") },
+                title = {
+                    Column {
+                        Text("Финиш")
+                        workout?.let {
+                            Text(
+                                FormatUtils.workoutWhen(it.startTime),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -94,24 +113,41 @@ fun ResultScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MapLibreContainer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-                    .clip(MaterialTheme.shapes.large),
-                styleUri = if (darkMap) STYLE_DARK else STYLE_LIGHT,
-                controller = controller,
-                overlay = MapOverlay(
-                    track = workout?.points.orEmpty(),
-                    showStartFinish = true,
-                    followUser = false,
-                    userPoint = null,
-                ),
-            )
+            if (state.saved) {
+                SectionCard(color = Success.copy(alpha = 0.14f)) {
+                    Text("СОХРАНЕНО", style = MaterialTheme.typography.labelLarge, color = Success)
+                    Text(
+                        "Пробежка уже в истории. Можно поделиться или удалить.",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+            if (points.size >= 2) {
+                MapLibreContainer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .clip(MaterialTheme.shapes.large),
+                    styleUri = if (darkMap) STYLE_DARK else STYLE_LIGHT,
+                    controller = controller,
+                    overlay = MapOverlay(
+                        track = points,
+                        showStartFinish = true,
+                        followUser = false,
+                        userPoint = null,
+                    ),
+                )
+            }
             if (state.tooShort) {
                 SectionCard(color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)) {
                     Text("Почти без движения", style = MaterialTheme.typography.titleMedium)
                     Text("Короткая тренировка сохранится, но в статистике почти не отразится.")
+                }
+            }
+            if (workout == null) {
+                SectionCard {
+                    Text("Нет данных пробежки", style = MaterialTheme.typography.titleMedium)
+                    Text("Сессия уже сброшена. Открой ленту — если успели сохранить, она там.")
                 }
             }
             if (workout != null && stats != null) {
@@ -154,6 +190,8 @@ fun ResultScreen(
                             controller.snapshot { bitmap ->
                                 if (bitmap != null) {
                                     ShareHelper.shareRouteImage(context, bitmap, workout, state.settings.unit)
+                                } else {
+                                    ShareHelper.shareSummary(context, workout, state.settings.unit)
                                 }
                             }
                         },
@@ -164,10 +202,25 @@ fun ResultScreen(
                         Text("  Фото")
                     }
                 }
+                OutlinedButton(
+                    onClick = { ShareHelper.shareSummary(context, workout, state.settings.unit) },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Icon(Icons.Outlined.Sms, contentDescription = null)
+                    Text("  Поделиться текстом")
+                }
             }
-            if (state.upcoming.isNotEmpty()) {
+            if (state.upcoming.isNotEmpty() && !state.saved) {
                 SectionCard(color = Ember.copy(alpha = 0.12f)) {
                     Text("ОТКРОЕТСЯ ПОСЛЕ СОХРАНЕНИЯ", style = MaterialTheme.typography.labelLarge, color = Ember)
+                    state.upcoming.forEach { id ->
+                        Text("${id.emoji}  ${id.title}", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            } else if (state.upcoming.isNotEmpty() && state.saved) {
+                SectionCard(color = Ember.copy(alpha = 0.12f)) {
+                    Text("АЧИВКИ", style = MaterialTheme.typography.labelLarge, color = Ember)
                     state.upcoming.forEach { id ->
                         Text("${id.emoji}  ${id.title}", style = MaterialTheme.typography.titleMedium)
                     }
@@ -187,7 +240,7 @@ fun ResultScreen(
                 if (state.saving) {
                     CircularProgressIndicator(Modifier.height(22.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text("Сохранить в историю")
+                    Text(if (state.saved) "Готово" else "Сохранить в историю")
                 }
             }
             OutlinedButton(
@@ -195,7 +248,7 @@ fun ResultScreen(
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = MaterialTheme.shapes.large,
             ) {
-                Text("Не сохранять")
+                Text(if (state.saved) "Удалить тренировку" else "Не сохранять")
             }
         }
     }

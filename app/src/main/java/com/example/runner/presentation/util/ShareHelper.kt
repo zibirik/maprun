@@ -15,6 +15,22 @@ import java.io.File
 import java.io.FileOutputStream
 
 object ShareHelper {
+    fun shareSummary(context: Context, workout: Workout, unit: DistanceUnit) {
+        val text = FormatUtils.shareSummary(
+            workoutDistance = workout.distanceMeters,
+            durationMillis = workout.durationMillis,
+            paceSecPerKm = workout.avgPaceSecPerKm,
+            calories = workout.calories,
+            unit = unit,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_SUBJECT, "Моя пробежка")
+        }
+        context.startActivity(Intent.createChooser(intent, "Поделиться"))
+    }
+
     fun shareGpx(context: Context, workout: Workout, gpx: String) {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         val file = File(dir, "workout-${workout.startTime}.gpx")

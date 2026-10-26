@@ -1,17 +1,25 @@
 package com.example.runner.presentation.components
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.runner.R
 import com.example.runner.domain.model.TrackPoint
+import kotlin.math.max
+import kotlin.math.min
+import org.maplibre.android.annotations.Icon
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.HeatmapLayer
@@ -56,88 +64,147 @@ class MapController {
     private var ghostMarker: Marker? = null
     private var startMarker: Marker? = null
     private var finishMarker: Marker? = null
+    private var fittedKey: Int = 0
 
     fun applyOverlay(overlay: MapOverlay, animateCamera: Boolean) {
-        val map = map ?: return
-        val context = mapView?.context ?: return
-        val icons = IconFactory.getInstance(context)
+        runCatching {
+            val map = map ?: return
+            val context = mapView?.context ?: return
 
-        trackLine?.remove()
-        ghostLine?.remove()
-        trackLine = null
-        ghostLine = null
+            trackLine?.remove()
+            ghostLine?.remove()
+            trackLine = null
+            ghostLine = null
 
-        if (overlay.track.size >= 2) {
-            trackLine = map.addPolyline(
-                PolylineOptions()
-                    .addAll(overlay.track.map { LatLng(it.latitude, it.longitude) })
-                    .color(overlay.trackColor)
-                    .width(6f),
-            )
-        }
-        if (overlay.ghostTrack.size >= 2) {
-            ghostLine = map.addPolyline(
-                PolylineOptions()
-                    .addAll(overlay.ghostTrack.map { LatLng(it.latitude, it.longitude) })
-                    .color(overlay.ghostColor)
-                    .width(4f),
-            )
-        }
+            if (overlay.track.size >= 2) {
+                trackLine = map.addPolyline(
+                    PolylineOptions()
+                        .addAll(overlay.track.map { LatLng(it.latitude, it.longitude) })
+                        .color(overlay.trackColor)
+                        .width(6f),
+                )
+            }
+            if (overlay.ghostTrack.size >= 2) {
+                ghostLine = map.addPolyline(
+                    PolylineOptions()
+                        .addAll(overlay.ghostTrack.map { LatLng(it.latitude, it.longitude) })
+                        .color(overlay.ghostColor)
+                        .width(4f),
+                )
+            }
 
-        userMarker?.remove()
-        userMarker = overlay.userPoint?.let {
-            map.addMarker(
-                MarkerOptions()
-                    .position(LatLng(it.latitude, it.longitude))
-                    .title("Я"),
-            )
-        }
-        ghostMarker?.remove()
-        ghostMarker = overlay.ghostPoint?.let {
-            map.addMarker(
-                MarkerOptions()
-                    .position(LatLng(it.latitude, it.longitude))
+            userMarker?.remove()
+            userMarker = overlay.userPoint?.let {
+                map.addMarker(
+                    MarkerOptions()
+                        .position(LatLng(it.latitude, it.longitude))
+                        .title("Я"),
+                )
+            }
+            ghostMarker?.remove()
+            ghostMarker = overlay.ghostPoint?.let { point ->
+                val options = MarkerOptions()
+                    .position(LatLng(point.latitude, point.longitude))
                     .title("Призрак")
-                    .icon(icons.fromResource(R.drawable.ic_ghost_marker)),
-            )
-        }
+                markerIcon(context, R.drawable.ic_ghost_marker)?.let { options.icon(it) }
+                map.addMarker(options)
+            }
 
-        if (overlay.showStartFinish && overlay.track.isNotEmpty()) {
-            startMarker?.remove()
-            finishMarker?.remove()
-            startMarker = map.addMarker(
-                MarkerOptions()
+            if (overlay.showStartFinish && overlay.track.isNotEmpty()) {
+                startMarker?.remove()
+                finishMarker?.remove()
+                val startOptions = MarkerOptions()
                     .position(LatLng(overlay.track.first().latitude, overlay.track.first().longitude))
                     .title("Старт")
-                    .icon(icons.fromResource(R.drawable.ic_start_marker)),
-            )
-            if (overlay.track.size > 1) {
-                finishMarker = map.addMarker(
-                    MarkerOptions()
+                markerIcon(context, R.drawable.ic_start_marker)?.let { startOptions.icon(it) }
+                startMarker = map.addMarker(startOptions)
+                if (overlay.track.size > 1) {
+                    val finishOptions = MarkerOptions()
                         .position(LatLng(overlay.track.last().latitude, overlay.track.last().longitude))
                         .title("Финиш")
-                        .icon(icons.fromResource(R.drawable.ic_finish_marker)),
-                )
+                    markerIcon(context, R.drawable.ic_finish_marker)?.let { finishOptions.icon(it) }
+                    finishMarker = map.addMarker(finishOptions)
+                }
             }
-        }
 
-        when {
-            overlay.showStartFinish && overlay.track.size >= 2 -> {
-                val bounds = LatLngBounds.Builder().apply {
-                    overlay.track.forEach { include(LatLng(it.latitude, it.longitude)) }
-                }.build()
-                map.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80), 600)
-            }
-            overlay.followUser && overlay.userPoint != null && animateCamera -> {
-                map.easeCamera(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(overlay.userPoint.latitude, overlay.userPoint.longitude),
-                        16.5,
-                    ),
-                    400,
-                )
+            when {
+                overlay.showStartFinish && overlay.track.size >= 2 -> {
+                    val key = overlay.track.size xor
+                        overlay.track.first().latitude.hashCode() xor
+                        overlay.track.last().longitude.hashCode()
+                    if (key != fittedKey) {
+                        fittedKey = key
+                        fitToTrack(overlay.track)
+                    }
+                }
+                overlay.followUser && overlay.userPoint != null && animateCamera -> {
+                    map.easeCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            LatLng(overlay.userPoint.latitude, overlay.userPoint.longitude),
+                            16.5,
+                        ),
+                        400,
+                    )
+                }
             }
         }
+    }
+
+    private fun fitToTrack(track: List<TrackPoint>) {
+        val map = map ?: return
+        val view = mapView ?: return
+        if (track.size < 2) return
+        val apply = {
+            runCatching {
+                val lats = track.map { it.latitude }
+                val lons = track.map { it.longitude }
+                val south = lats.min()
+                val north = lats.max()
+                val west = lons.min()
+                val east = lons.max()
+                val latSpan = north - south
+                val lonSpan = east - west
+                if (latSpan < 1e-6 && lonSpan < 1e-6) {
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(south, west), 16.0))
+                } else {
+                    val padLat = max(latSpan * 0.12, 0.0004)
+                    val padLon = max(lonSpan * 0.12, 0.0004)
+                    val bounds = LatLngBounds.Builder()
+                        .include(LatLng(south - padLat, west - padLon))
+                        .include(LatLng(north + padLat, east + padLon))
+                        .build()
+                    val padding = min(72, min(view.width, view.height) / 6).coerceAtLeast(24)
+                    if (view.width > padding * 2 && view.height > padding * 2) {
+                        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding))
+                    } else {
+                        map.moveCamera(
+                            CameraUpdateFactory.newLatLngZoom(
+                                LatLng((south + north) / 2, (west + east) / 2),
+                                15.0,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        if (view.width == 0 || view.height == 0) {
+            view.post { apply() }
+        } else {
+            apply()
+        }
+    }
+
+    private fun markerIcon(context: Context, @DrawableRes resId: Int): Icon? {
+        return runCatching {
+            val drawable = ContextCompat.getDrawable(context, resId) ?: return@runCatching null
+            val width = drawable.intrinsicWidth.coerceAtLeast(48)
+            val height = drawable.intrinsicHeight.coerceAtLeast(48)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, width, height)
+            drawable.draw(canvas)
+            IconFactory.getInstance(context).fromBitmap(bitmap)
+        }.getOrNull()
     }
 
     fun moveTo(lat: Double, lon: Double, zoom: Double = 16.0) {
@@ -194,11 +261,15 @@ class MapController {
                     },
                 )
             }
-            if (points.isNotEmpty()) {
-                val bounds = LatLngBounds.Builder().apply {
-                    points.forEach { include(LatLng(it.latitude, it.longitude)) }
-                }.build()
-                map.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80), 800)
+            if (points.size >= 2) {
+                fitToTrack(points)
+            } else if (points.size == 1) {
+                map.moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(points.first().latitude, points.first().longitude),
+                        14.0,
+                    ),
+                )
             }
         }
     }
